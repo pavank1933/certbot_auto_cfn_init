@@ -1,0 +1,87 @@
+[
+  {
+    "ParameterKey": "VPCCIDR",
+    "ParameterValue": "10.0.0.0/16"
+  },
+  {
+    "ParameterKey": "PublicSubnet1",
+    "ParameterValue": "10.0.0.0/24"
+  },
+  {
+    "ParameterKey": "PrivateSubnet1",
+    "ParameterValue": "10.0.1.0/24"
+  },
+  {
+    "ParameterKey": "PrivateSubnet2",
+    "ParameterValue": "10.0.2.0/24"
+  },
+  {
+    "ParameterKey": "TagPrefix",
+    "ParameterValue": "NestedCFN"
+  },
+  {
+    "ParameterKey": "S3BucketName",
+    "ParameterValue": "card-up-cloudformation"
+  },
+  {
+    "ParameterKey": "TemplatePath",
+    "ParameterValue": "stacks"  
+  },
+  {
+    "ParameterKey": "KeyPair",
+    "ParameterValue": "levr-dev-aws"
+  },
+  {
+    "ParameterKey": "WebInstanceType",
+    "ParameterValue": "t2.micro"
+  },
+  {
+    "ParameterKey": "WebMinSize",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "WebMaxSize",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "AMIId",
+    "ParameterValue": "ami-ab0c67d7"
+  },
+  {
+    "ParameterKey": "DBUsername",
+    "ParameterValue": "LevrTech"
+  },
+  {
+    "ParameterKey": "DBPassword",
+    "ParameterValue": "L3vrP4S52oi8"
+  },
+  {
+    "ParameterKey": "DBInstanceType",
+    "ParameterValue": "db.t2.micro"
+  },
+  { "ParameterKey": "KMSId",
+    "ParameterValue": "arn:aws:kms:us-east-1:000151750933:key/bc7e9182-2d8a-48bd-b124-9fee99326553"
+  },
+  {
+    "ParameterKey": "InstanceVolumeSize",
+    "ParameterValue": "16"
+  },
+  { "ParameterKey": "InstanceVolumeType",
+    "ParameterValue": "gp2"
+  },
+  { "ParameterKey": "InstanceVolumeMountPoint",
+    "ParameterValue": "/dev/xvda"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "production"
+  },
+  {
+    "ParameterKey": "TagPrefix",
+    "ParameterValue": "LevrTechCF"
+  },
+  {
+    "ParameterKey": "LevrTechCoreRepo",
+    "ParameterValue": "git@gitlab.com:levr/passenger-sample.git"
+  }
+]

@@ -1,0 +1,657 @@
+Description: Master stack which creates all required resources for the LevrTech Platform
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket to allow access to the Web Server IAM Role.
+  TemplatePath:
+    Type: String
+    Description: S3Bucket Path where the templates are stored (Optional)
+  TagPrefix:  
+    Type: String
+    Description: Enter Prefix that should be used for Tags.
+  VPCCIDR:
+    Type: String
+    Description: CIDR block should be used to create the VPC (e.g. 172.21.1.0/24)
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x. (e.g.
+      172.21.1.0/24)
+  PublicSubnet1:
+    Type: String
+    Description: CIDR block should be used to create the public subnet in AZ1 (e.g.
+      172.21.1.0/26)
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x. (e.g.
+      172.21.1.0/26)
+  PrivateSubnet1:
+    Type: String
+    Description: CIDR block should be used to create the public subnet in AZ1 (e.g.
+      172.21.1.128/26)
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x. (e.g.
+      172.21.1.128/26)
+  PrivateSubnet2:
+    Type: String
+    Description: CIDR block should be used to create the public subnet in AZ1 (e.g.
+      172.21.1.192/26)
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x. (e.g.
+      172.21.1.192/26)
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Enter a valid KeyPair Name
+  AMIId:
+    Type: AWS::EC2::Image::Id
+    Description: Enter a valid AMI ID to launch the instance
+  WebInstanceType:
+    Type: String
+    Description: Enter one of the possible instance type for web server
+    AllowedValues:
+      - t2.micro
+      - t2.large
+      - m4.large
+      - m4.xlarge
+      - c4.large
+  WebMinSize:
+    Type: String
+    Description: Minimum number of instances in auto scaling group
+  WebMaxSize:
+    Type: String
+    Description: Maximum number of instances in auto scaling group
+  DBUsername:
+    Type: String
+    Description: Enter a valid Database master username
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  DBPassword:
+    Type: String
+    Description: Enter a valid Database master password
+    NoEcho: true
+    MinLength: 1
+    MaxLength: 41
+    AllowedPattern: '[a-zA-Z0-9]*'
+  DBInstanceType:
+    Type: String
+    Description: Enter one of the possible instance type for database
+    AllowedValues:
+      - db.t2.micro
+      - db.t2.small
+      - db.t2.medium
+      - db.t2.large
+  KMSId:
+    Type: String
+    Description: Encryption key associated to RDS instances
+  InstanceVolumeSize:
+    Type: Number
+    Description: Size in GB for root volume
+    AllowedValues:
+      - 16
+      - 20
+      - 32
+      - 50
+  InstanceVolumeType:
+    Type: String
+    Description: Volume type for instance
+    AllowedValues:
+      - gp2
+      - io1
+  InstanceVolumeMountPoint:
+    Type: String
+    Description: Mount Point for root Volume
+    AllowedValues:
+      - /dev/sda
+      - /dev/xvda
+  Environment:
+    Type: String
+    Description: Select the appropriate environment
+    AllowedValues:
+      - development
+      - production
+  LevrTechCoreRepo:
+    Type: String
+    Description: Git Repo LevrTech Core
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'VPCCIDR'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref 'TagPrefix'
+  PubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Ref 'PublicSubnet1'
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PublicSubnet1'
+  PrivSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Ref 'PrivateSubnet1'
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PrivateSubnet1'
+  PrivSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Ref 'PrivateSubnet2'
+      AvailabilityZone: !Sub '${AWS::Region}b'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PrivateSubnet2'
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-IGW'
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+  NATEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn: GatewayToInternet
+  NATEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    DependsOn: GatewayToInternet
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NATEIP1.AllocationId'
+      SubnetId: !Ref 'PubSubnet1'
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PublicRouteTable'
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PrivateRouteTable1'
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-PrivateRouteTable2'
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref 'InternetGateway'
+      RouteTableId: !Ref 'PublicRouteTable'
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref 'NAT1'
+      RouteTableId: !Ref 'PrivateRouteTable1'
+  PubSubnet1RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      SubnetId: !Ref 'PubSubnet1'
+  PrivSubnet1RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PrivateRouteTable1'
+      SubnetId: !Ref 'PrivSubnet1'
+  PrivSubnet2RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PrivateRouteTable2'
+      SubnetId: !Ref 'PrivSubnet2'
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS DB Subnet group
+      SubnetIds:
+        - !Ref 'PrivSubnet1'
+        - !Ref 'PrivSubnet2'
+      Tags:
+        - Key: Name
+          Value: !Sub '${TagPrefix}-RDSSubnetGroup'
+  DBClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database client security group
+      Tags:
+        - Key: Name
+          Value: !Sub 'DBClientSecurityGroup'
+      VpcId: !Ref 'VPC'
+  DBServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database server security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref 'DBClientSecurityGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub 'DBServerSecurityGroup'
+      VpcId: !Ref 'VPC'
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ELB Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub 'ELBSecurityGroup-${Environment}'
+      VpcId: !Ref 'VPC'
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web server security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref 'ELBSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref 'ELBSecurityGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub 'WebServerSecurityGroup-${Environment}'
+      VpcId: !Ref 'VPC'
+  WebServerIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'WebServerIAMRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: WebServerS3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+  LevrTechCoreInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'WebServerIAMRole'
+  DBServer:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 50
+      AllowMajorVersionUpgrade: true
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 0
+      DBInstanceClass: !Ref 'DBInstanceType'
+      DBSubnetGroupName: !Ref 'RDSSubnetGroup'
+      Engine: mysql
+      EngineVersion: 5.7.19
+      MasterUsername: !Ref 'DBUsername'
+      MasterUserPassword: !Ref 'DBPassword'
+      MultiAZ: true
+      PubliclyAccessible: false
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref 'DBServerSecurityGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub 'DBServer-${Environment}'
+  WebELB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      LoadBalancerName: !Sub 'WebELB-${Environment}'
+      Scheme: internet-facing
+      CrossZone: true
+      Subnets:
+        - !Ref 'PubSubnet1'
+      SecurityGroups:
+        - !Ref 'ELBSecurityGroup'
+      Listeners:
+        - LoadBalancerPort: '80'
+          InstancePort: '80'
+          Protocol: HTTP
+        - LoadBalancerPort: '443'
+          InstancePort: '443'
+          Protocol: HTTPS
+          SSLCertificateId: 'arn:aws:acm:ap-southeast-1:000151750933:certificate/366c6741-7612-4842-b592-3a1f67fcee87'
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '6'
+        Timeout: '5'
+      ConnectionDrainingPolicy:
+        Enabled: 'true'
+        Timeout: '60'
+      Tags:
+        - Key: Name
+          Value: !Sub 'WebELB-${Environment}'
+  LevrTechCoreServerLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      KeyName: !Ref 'KeyPair'
+      ImageId: !Ref 'AMIId'
+      InstanceType: !Ref 'WebInstanceType'
+      IamInstanceProfile: !Ref 'LevrTechCoreInstanceProfile'
+      SecurityGroups:
+      - !Ref 'WebServerSecurityGroup'
+      UserData:
+        Fn::Base64:
+          Fn::Sub: |
+            #!/bin/sh
+            sudo apt-get update -y && sudo apt-get upgrade -y
+      BlockDeviceMappings: 
+        - DeviceName: ${InstanceVolumeMountPoint}
+          Ebs:
+            VolumeSize: 16
+            VolumeType: ${InstanceVolumeType}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          initInstance:
+          - getAppCode
+          - installSSLCertificates
+          - deployLevrTechApp
+        getAppCode:
+          files:
+            /home/ubuntu/.ssh/id_rsa:
+              content: !Sub |
+                -----BEGIN RSA PRIVATE KEY-----
+                MIIJKQIBAAKCAgEAt3sJRuR3A/HZTuzApEwZTYyt6nDjkJuwbzeDHdnxRmUPQZUB
+                5+S2EHYiIS3sHRDr+Q6d2bB9tnTAn/qzMldy5CAfRL6pXVrcyk7vcFqcYlJMCXEy
+                6TaBdZoDhY08yOmvVGsIb/b99VMzCddahL2J/iKfrzgvfo7YP2AhP4Ib+IFTRV8b
+                P4Vg2A9prQHQ9WBnsEA3gCnOylOfTR+7shZ/z6M0R9JTnSqutvdZZ0OkfuEUrIA0
+                0/s89ErR17c+JmaTsa+9Z95NmTRTMDUu8WU4or0jaZ/lWolvY8aoVbl92RylHrwf
+                fd8kphvTKm6RJhjtf9YnEtrluvPEIbRgmEY2wVoLvpYeIksUqzpqTNZ3UsPdqIjm
+                tdtFiTvuX6WyZf7KI+UzEs7Wu5YpvmNBXw3psiYBuKOOrZdPjnFgNYC/TpmKKz5D
+                zjL2zWKE0mjctew0mAJNrryEo8tetqwV8nedFzohQwF2tp7j4LAIuB1rg4KT2Jj7
+                jFidoD9YumN7lql8Vnmq6zyT3ijHQ8ugv4uPpp7PLbPLQt2sQDccUpU1Xix4ROJ1
+                5UHj4RJVJIAiN/RcRRnfulDYesnAVgJSCsfn2KV6BxFgO7srv7d8+keLzq2c7VY3
+                lxZ8A7hPMnSvl92zX+VzDjT8iKLFlM5CcE8lM8T3/oVaGl49LEqQjlYlDM0CAwEA
+                AQKCAgEAqcjj08M0UuUoxv0UYrS8sWNdyFUAb99yC+idnzD/MLnxvSlK4zBkPaVj
+                fbqGBHuVMRoSfc/w9LbjTObrjckYWvtSlAWuqeGb8GXM8fYXQnCPRimHCAHVGGMV
+                oS8KMYz1HrQQ0bMIXEzKLPAoJi9Sk2WsyLLAWGeMulCVU7Rtd68MxGP2zff5ntXc
+                XykQGRBFwvYZpbKKVfW9stuLj4d8bELE7TU3BHfrxwnqpEEW5gYYYGwe9o5FYHYf
+                6nL5wwUm5MUQCx7ORdgCptiAAQc+unE1ZNd+oCIPfo/lU7ZbO15jeaZxqcOkoUWc
+                SWaZUFy+4Y3lCHChJzfNpbbJr/9BSGeQC0Tc33GR7zTRG79YgRTF5GvGUxG7uQ5z
+                D+9WSfw1axZCBXxX/p+k3ZJm/Z0idt1IH5bqoSQMpTvRONAsceXwdNOT75QBH5g2
+                LL5+/4UFB2SbXH3wiwAUg8k1mxG1enKmB3MQe/RwVthVjhvOgFmqdpoXwVjMsFWY
+                T3moUR9c05dSjzCh9gQfrJa1YPS+DhQH5gQKCauogchMS7DZfOAyx5Ve0DmYLDzq
+                EBdCqY4ylQ+TqqR7Jwkwc7y4HlkUZSMFXq5/qCzPhz27bF+L6Q0wJ+rqtWHIxFA/
+                1vXSztai52TOvjxDpIhmWD1dvc2XvyT224e4vGeND1JCpRoS9S0CggEBANrHuqYW
+                s7xfkx82ERixUymursm6bjRW4yN6ItNNZdualyIIwMDviN3fbBNZ5xh/jmzQLaBb
+                19Kf3AVnKR5YB9C0y+uzAnSiy/010YC7ZghN3s8GmsRjnd20duhI0VQ1yBXJTOQ+
+                N5XJcel7CScBlcHa+NoWzgOc5igrOQa4WRmWhZjZLsAWVuNeI4Un6rdwQyhFCfHj
+                IAP9Fmq4Bj8AXB54WKE1xm7Jfm8O36LM2KiPTakc+ew6SfXlto4nBOv6kwwnA7p7
+                wayXjh+D0WahiKMUiol60aBaxmGInQxbMPvN3VMDpjiGlglFF8zxTpChzQcS23MH
+                Xndc08xCbNoP2CsCggEBANax8mYHwoRZ2hrj7NoZ92yqW9jANhuwkCCRHjYsEzpt
+                K8RYyQrcnHxbzzXgp8XMU6LXhCLG8Ezqp4zMxMTBDfbfoqKRhob62W1a+Jivw3o7
+                TtAOrDitMyCWpnP7yC1zvpEJGDruLi1XfhEE/fd2We9udtgl4nFcfjBzvSLL+9NJ
+                XM8dVDT+Zs4K2Vskztvz+1YPpWohDHuma0v2hyJrZ5pyl0I0/8AABAAYWY0/jZ3r
+                xtK/Fibv9Yit4s7USsITpqHE2HXLjBewjmxCUGx5U4gux7wSxTbrbjEd8Tnnqsro
+                kgKu0GDrYWmXPy1afVySp2nCtMIo6LBCZfZP9QO9+ucCggEBANb5fQkos5H84+a+
+                TMxTqeECWZO1Ugax/dzlbYTtv5Gq9Kinqyep93X0zRCyvWaQKFX5tWul84tuM1dH
+                x9qeK4fDr8C5lEchlIoJsQPqoFa2laId3kPtkrjAVDrpGm/BrQrjU1/PVvUjDYCb
+                uiGO6CWlUfOShvp72JhN6GoXCM4g3sOTXOG40cX2wbZcw8FeWU8fj6cUQ2hH7xgM
+                HW8Ynmv+WzCFU6eW7FqaZdtlp9rxfSEYbOfXWsd54gkKhEaQYJ+HUp2Sb3t1LF0B
+                POi4/zcnvv1aJtOHfvllsNPsY1R6M+kXY+SVMqaHMtzZnBZ4Nqultubvrb5iA2fp
+                OWaIPSMCggEAf0vfF5P+R48m/M6rvt2qkKmp76h37I8Rxd2FdkVH2VqlmrOx8FjC
+                CBI/mAhuMZ9m76StWhlunYx8b8Vx3d9BsmEDAzUZ+Kp/hJFt2MpOMwk7P62Te79m
+                Eyp/40EkfZ6lHUWxMi/K/WNlAh5dnv5zcL2khaBg1SosP/o/6IPd+ncDKmKPbSRy
+                PDS+j4YRiOTu3yZDw9t4lVAlSlMP6N6Z/T94Y+8cvPDFbnEBl/hYtYv4xTg7oDai
+                9Ll1Q4EoGk6gfEZEugNIOzuaFqJzIP4HAzYJg3/1owyQt1qzjsvHvquK90BDmVO2
+                3G6rLO78aYki7lhd6MlsviWAYz0hX2ijfQKCAQBxvwZ4iteolfRg21cQ6ACZO2fj
+                NrTOPfcbiHt07VEQTAv6M7zBR7ZHl2VzdplAqANXTsX9+VExp0z5C3OGejMmdTaS
+                EhycEboRK8rPnj5jclxTSJKBIw59ZT527DaFMb+AkbmYmzxUfCKeZyVFR78phkL3
+                xQ1ExoFw7IF5Ej6u0bIIra0dRklLa9fk+8rsVwT10lkwsKcjDuFzRZBDP32c98+H
+                2t0IBkyvfe8bh60xsDE4xGTUZrPdEqvYyzfyno13ApKtHMB1nPQfXEhpuJEw7Mhx
+                7ra0VX6708Fxz4OIm+saSlnlXccaCZAQ6eiI8pbWU278coECaS7Vk9F13u/q
+                -----END RSA PRIVATE KEY-----
+              mode: "0006"
+            /home/ubuntu/setup/git-clone.sh:
+              content: !Sub |
+                #!/bin/bash +x
+                su ubuntu
+                cd /home/ubuntu
+                ssh-keyscan -t rsa -H gitlab.com >> /home/ubuntu/.ssh/known_hosts
+                git clone ${LevrTechCoreRepo} LevrTech
+              mode: "000744"
+          commands:
+            01-git-clone:
+              command: "/home/ubuntu/setup/git-clone.sh"
+        installSSLCertificates:
+          files:
+            /home/ubuntu/setup/get-letsencrypt.sh:
+              content: !Sub |
+                #!/bin/bash -x
+                # Install certbot (letsencrypt)
+                add-apt-repository -y ppa:certbot/certbot
+                apt-get update && apt-get install -y python-certbot-nginx
+                # Update DH parameters
+                openssl dhparam -rand /dev/urandom -outform pem -out /etc/ssl/certs/dhparam.pem 2048
+                # Install certificate
+                certbot --nginx -n --agree-tos --email admin@levr.tech -d LevrTech-test.levr.tech
+                echo '0 0 * * * /usr/bin/certbot renew --quiet' > /tmp/cronjob.txt
+                crontab /tmp/cronjob.txt
+              mode: "000744"
+            /etc/nginx/nginx.conf: !Sub |
+              user www-data;
+              worker_processes 4;
+              pid /run/nginx.pid;
+
+              events {
+                worker_connections 768;
+                # multi_accept on;
+              }
+
+              http {
+
+                sendfile on;
+                tcp_nopush on;
+                tcp_nodelay on;
+                keepalive_timeout 65;
+                types_hash_max_size 2048;
+                
+                #File upload settings
+                client_max_body_size 6M;
+                server_tokens off;
+                more_clear_headers 'Server' 'X-Powered-By' 'X-Runtime';
+                      
+                # server_names_hash_bucket_size 64;
+                # server_name_in_redirect off;
+
+                include /etc/nginx/mime.types;
+                default_type application/octet-stream;
+
+                ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+                ssl_prefer_server_ciphers on;
+
+                access_log /var/log/nginx/access.log;
+                error_log /var/log/nginx/error.log;
+
+                gzip on;
+                gzip_disable "msie6";
+
+                # Phusion Passenger config
+                # Uncomment it if you installed passenger or passenger-enterprise
+                
+                passenger_root /usr/lib/ruby/vendor_ruby/phusion_passenger/locations.ini;
+                passenger_ruby /usr/share/rvm/rubies/ruby-2.4.1/bin/ruby;
+                # passenger_ruby /usr/bin/passenger_free_ruby;
+                # passenger_ruby /home/ubuntu/.rvm/gems/ruby-2.2.1/wrappers/ruby;
+
+                include /etc/nginx/conf.d/*.conf;
+                include /etc/nginx/sites-enabled/*;
+              }
+            /etc/nginx/sites-enabled/LevrTech:
+              content: !Sub |
+                server {
+
+                  listen 443 ssl; 
+                  # server_name LevrTech.co;
+                  server_name LevrTech-test.levr.tech;
+                  
+                  ssl_certificate /etc/letsencrypt/live/LevrTech-test.levr.tech/fullchain.pem;
+                  ssl_certificate_key /etc/letsencrypt/live/LevrTech-test.levr.tech/privkey.pem;
+
+                  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+                  ssl_prefer_server_ciphers on;
+                  ssl_dhparam /etc/ssl/certs/dhparam.pem;
+                  #ssl_ciphers 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS';
+                  ssl_ciphers 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!CAMELLIA:!DES:!MD5:!PSK:!RC4';
+                  ssl_session_timeout 1d;
+                  ssl_session_cache shared:SSL:50m;
+                  ssl_stapling on;
+                  ssl_stapling_verify on;
+                  add_header Strict-Transport-Security "max-age=31536000; includeSubdomains; preload";
+                  add_header X-Frame-Options "SAMEORIGIN";
+                  #add_header X-XSS-Protection "1; mode=block";
+                  add_header X-Content-Type-Options nosniff;
+
+
+                  passenger_enabled on;
+                  passenger_app_env production;
+                  # root /home/ubuntu/LevrTech;
+
+                  location ~ /.well-known {
+                                allow all;
+                  }
+                }
+
+                server {
+                  listen 80;
+                  # server_name LevrTech.co;
+                  server_name LevrTech-test.levr.tech
+                  # return 301 https://$host$request_uri;
+                  location / {
+                    http://0.0.0.0:3000$request_uri;
+                  }
+                }
+
+                # server {
+                #     listen 80;
+                #     listen 443 ssl;
+                #     server_name LevrTech-test.levr.tech;
+                #     return 301 https://LevrTech-test.levr.tech$request_uri;
+                # }
+            /home/ubuntu/setup/update-nginx.sh:
+              content: !Sub |
+                # Restart nginx
+                service nginx restart
+              mode: "000744"
+          commands:
+            01-get-letsencrypt:
+              command: "/home/ubuntu/setup/get-letsencrypt.sh"
+            02-update-nginx:
+              command: "/home/ubuntu/update-nginx.sh"
+        deployLevrTechApp:
+          files:
+            /home/ubuntu/setup/deploy-LevrTech.sh:
+              content: !Sub |
+                #!/bin/bash -x
+                cd /home/ubuntu/LevrTech
+                bundle install
+                bundle exec passenger start
+              mode: "000744"
+          commands:
+            01-deploy-card-up:
+              command: "/home/ubuntu/setup/deploy-LevrTech.sh"
+  LevrTechCoreServerASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref 'PubSubnet1'
+      LaunchConfigurationName: !Ref 'LevrTechCoreServerLaunchConfig'
+      MinSize: !Ref 'WebMinSize'
+      MaxSize: !Ref 'WebMaxSize'
+      LoadBalancerNames:
+        - !Ref 'WebELB'
+      Tags:
+        - Key: Name
+          Value: !Sub 'WebServer-${Environment}'
+          PropagateAtLaunch: true
+Outputs:
+  VPCID:
+    Description: VPC ID
+    Value: !Ref 'VPC'
+  PrivateSubnet1:
+    Description: Subnet ID of private subnet in AZ1
+    Value: !Ref 'PrivSubnet1'
+  PrivateSubnet2:
+    Description: Subnet ID of private subnet in AZ2
+    Value: !Ref 'PrivSubnet2'
+  PublicSubnet1:
+    Description: Subnet ID of public subnet in AZ1
+    Value: !Ref 'PubSubnet1'
+  RDSSubnetGroup:
+    Description: Name of the DB Subnet group
+    Value: !Ref 'RDSSubnetGroup'
+  NATEIP1:
+    Description: NAT Gateway ID in AZ1
+    Value: !Ref 'NAT1'
+  DBClientSecurityGroup:
+    Description: DB Client Security Group ID
+    Value: !Ref 'DBClientSecurityGroup'
+  DBServerSG:
+    Description: DB Server Security Group ID
+    Value: !Ref 'DBServerSecurityGroup'
+  WebServerSecurityGroup:
+    Description: Web Server Security Group ID
+    Value: !Ref 'WebServerSecurityGroup'
+  ELBSecurityGroup:
+    Description: ELB Security Group ID
+    Value: !Ref 'ELBSecurityGroup'
+  LevrTechCoreInstanceProfile:
+    Description: Instance Profile of IAM Role that needs to be attached to EC2 instance
+    Value: !GetAtt 'LevrTechCoreInstanceProfile.Arn'
+  WebELBURL:
+    Description: URL endpoint of web ELB
+    Value: !GetAtt 'WebELB.DNSName'
+  DBEndpoint:
+    Description: URL endpoint of database
+    Value: !GetAtt 'DBServer.Endpoint.Address'
